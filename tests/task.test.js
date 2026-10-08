@@ -6,16 +6,28 @@ const Task = require('../models/Task');
 
 let mongoServer;
 
+// Increase timeout for MongoDB Memory Server startup
+jest.setTimeout(60000);
+
 beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
+
     const mongoUri = mongoServer.getUri();
+
     await mongoose.connect(mongoUri);
-});
+}, 60000);
 
 afterAll(async () => {
-    await mongoose.disconnect();
-    await mongoServer.stop();
-});
+    try {
+        if (mongoose.connection.readyState !== 0) {
+            await mongoose.disconnect();
+        }
+    } finally {
+        if (mongoServer) {
+            await mongoServer.stop();
+        }
+    }
+}, 60000);
 
 beforeEach(async () => {
     await Task.deleteMany({});
@@ -38,7 +50,9 @@ describe('Task API', () => {
 
             expect(response.body.success).toBe(true);
             expect(response.body.data.title).toBe('Test Task');
-            expect(response.body.data.description).toBe('Test Description');
+            expect(response.body.data.description).toBe(
+                'Test Description'
+            );
         });
 
         it('should return 400 if title is missing', async () => {
@@ -58,8 +72,14 @@ describe('Task API', () => {
     describe('GET /api/tasks', () => {
         it('should return all tasks', async () => {
             await Task.create([
-                { title: 'Task 1', description: 'Description 1' },
-                { title: 'Task 2', description: 'Description 2' }
+                {
+                    title: 'Task 1',
+                    description: 'Description 1'
+                },
+                {
+                    title: 'Task 2',
+                    description: 'Description 2'
+                }
             ]);
 
             const response = await request(app)
@@ -98,6 +118,7 @@ describe('Task API', () => {
 
         it('should return 404 for non-existent task', async () => {
             const fakeId = new mongoose.Types.ObjectId();
+
             const response = await request(app)
                 .get('/api/tasks/' + fakeId)
                 .expect(404);
@@ -115,7 +136,10 @@ describe('Task API', () => {
 
             const response = await request(app)
                 .put('/api/tasks/' + task._id)
-                .send({ title: 'Updated Title', status: 'completed' })
+                .send({
+                    title: 'Updated Title',
+                    status: 'completed'
+                })
                 .expect(200);
 
             expect(response.body.success).toBe(true);
@@ -138,6 +162,7 @@ describe('Task API', () => {
             expect(response.body.success).toBe(true);
 
             const deletedTask = await Task.findById(task._id);
+
             expect(deletedTask).toBeNull();
         });
     });
